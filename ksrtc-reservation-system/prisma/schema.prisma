@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  customer_id  Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  password     String
+  phone        String
+  created_at   DateTime      @default(now())
+  reservations Reservation[]
+  payments     Payment[]
+  attributes   Attribute[]
+
+  @@map("customers")
+}
+
+model Payment {
+  payment_id     Int           @id @default(autoincrement())
+  customer_id    Int
+  amount         Decimal       @db.Decimal(10, 2)
+  payment_date   DateTime      @default(now())
+  payment_status String        @default("pending")
+  payment_method String?
+  customer       Customer      @relation(fields: [customer_id], references: [customer_id])
+  reservations   Reservation[]
+  attributes     Attribute[]
+
+  @@map("payments")
+}
+
+model Reservation {
+  reservation_id   Int      @id @default(autoincrement())
+  customer_id      Int
+  schedule_id      Int
+  payment_id       Int?
+  reservation_date DateTime @default(now())
+  status           String   @default("pending")
+  seats_booked     String[] // Array of seat numbers
+  customer         Customer @relation(fields: [customer_id], references: [customer_id])
+  schedule         Schedule @relation(fields: [schedule_id], references: [schedule_id])
+  payment          Payment? @relation(fields: [payment_id], references: [payment_id])
+
+  @@map("reservations")
+}
+
+model Seat {
+  seat_id      Int     @id @default(autoincrement())
+  bus_id       Int
+  seat_number  String
+  is_available Boolean @default(true)
+  bus          Bus     @relation(fields: [bus_id], references: [bus_id])
+
+  @@unique([bus_id, seat_number])
+  @@map("seats")
+}
+
+model Route {
+  route_id    Int        @id @default(autoincrement())
+  source      String
+  destination String
+  distance    Decimal    @db.Decimal(8, 2)
+  schedules   Schedule[]
+
+  @@map("routes")
+}
+
+model Schedule {
+  schedule_id    Int           @id @default(autoincrement())
+  route_id       Int
+  bus_id         Int
+  departure_time DateTime
+  arrival_time   DateTime
+  fare           Decimal       @db.Decimal(8, 2)
+  route          Route         @relation(fields: [route_id], references: [route_id])
+  bus            Bus           @relation(fields: [bus_id], references: [bus_id])
+  reservations   Reservation[]
+
+  @@map("schedules")
+}
+
+model Bus {
+  bus_id     Int        @id @default(autoincrement())
+  bus_number String     @unique
+  capacity   Int
+  seats      Seat[]
+  schedules  Schedule[]
+
+  @@map("buses")
+}
+
+model Attribute {
+  attribute_id    Int      @id @default(autoincrement())
+  entity_type     String
+  entity_id       Int
+  attribute_name  String
+  attribute_value String
+  customer        Customer? @relation(fields: [entity_id], references: [customer_id], map: "fk_attribute_customer")
+  payment         Payment?  @relation(fields: [entity_id], references: [payment_id], map: "fk_attribute_payment")
+
+  @@map("attributes")
+}
