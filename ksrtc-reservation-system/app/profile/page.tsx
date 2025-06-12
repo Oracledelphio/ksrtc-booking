@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { User, Mail, Phone, Bus, Clock, MapPin, ArrowLeft, Calendar } from "lucide-react"
+import { User, Mail, Phone, Bus, Clock, MapPin, ArrowLeft, Calendar, Loader2 } from "lucide-react"
 
 interface UserProfile {
   id: number
@@ -37,7 +37,7 @@ interface Reservation {
     amount: number
     payment_status: string
     payment_method: string
-  }
+  } | null
 }
 
 interface ProfileData {
@@ -123,10 +123,26 @@ export default function ProfilePage() {
     }
   }
 
+  // Calculate total spent (only from completed payments)
+  const totalSpent =
+    profileData?.reservations.reduce((total, reservation) => {
+      if (reservation.payment && reservation.payment.payment_status === "completed") {
+        return total + Number(reservation.payment.amount)
+      }
+      return total
+    }, 0) || 0
+
+  // Calculate confirmed reservations
+  const confirmedReservations =
+    profileData?.reservations.filter((reservation) => reservation.status === "confirmed").length || 0
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <div className="text-kerala-white text-xl">Loading profile...</div>
+        <div className="flex items-center space-x-2 text-kerala-white text-xl">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading profile...</span>
+        </div>
       </div>
     )
   }
@@ -134,13 +150,13 @@ export default function ProfilePage() {
   if (error || !profileData) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
+        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl max-w-md">
           <CardContent className="pt-6 text-center">
-            <p className="text-kerala-brown">{error || "Profile not found"}</p>
+            <User className="h-16 w-16 text-kerala-brown/50 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-kerala-brown mb-2">Profile Not Available</h3>
+            <p className="text-kerala-brown/70 mb-4">{error || "Profile not found"}</p>
             <Link href="/dashboard">
-              <Button className="mt-4 bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">
-                Back to Dashboard
-              </Button>
+              <Button className="bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">Back to Dashboard</Button>
             </Link>
           </CardContent>
         </Card>
@@ -232,13 +248,7 @@ export default function ProfilePage() {
 
             <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
               <CardContent className="pt-6 text-center">
-                <div className="text-3xl font-bold text-kerala-green mb-2">
-                  ₹
-                  {profileData.reservations.reduce(
-                    (total, reservation) => total + Number(reservation.payment.amount),
-                    0,
-                  )}
-                </div>
+                <div className="text-3xl font-bold text-kerala-green mb-2">₹{totalSpent}</div>
                 <div className="text-kerala-brown">Total Spent</div>
               </CardContent>
             </Card>
@@ -306,12 +316,19 @@ export default function ProfilePage() {
                                 <Badge className={getStatusColor(reservation.status)}>
                                   {reservation.status.charAt(0).toUpperCase() + reservation.status.slice(1)}
                                 </Badge>
+                                {!reservation.payment && (
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                    Payment Pending
+                                  </Badge>
+                                )}
                               </div>
                             </div>
 
                             <div className="text-right">
                               <div className="text-lg font-bold text-kerala-green mb-2">
-                                ₹{reservation.payment.amount}
+                                ₹
+                                {reservation.payment?.amount ||
+                                  reservation.schedule.fare * reservation.seats_booked.length}
                               </div>
                               <Link href={`/confirmation/${reservation.reservation_id}`}>
                                 <Button
@@ -370,12 +387,19 @@ export default function ProfilePage() {
                                 <Badge className={getStatusColor(reservation.status)}>
                                   {reservation.status.charAt(0).toUpperCase() + reservation.status.slice(1)}
                                 </Badge>
+                                {!reservation.payment && (
+                                  <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                    Payment Pending
+                                  </Badge>
+                                )}
                               </div>
                             </div>
 
                             <div className="text-right">
                               <div className="text-lg font-bold text-kerala-green mb-2">
-                                ₹{reservation.payment.amount}
+                                ₹
+                                {reservation.payment?.amount ||
+                                  reservation.schedule.fare * reservation.seats_booked.length}
                               </div>
                               <Link href={`/confirmation/${reservation.reservation_id}`}>
                                 <Button
