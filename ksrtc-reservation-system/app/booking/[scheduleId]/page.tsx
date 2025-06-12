@@ -6,7 +6,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Bus, Clock, MapPin, ArrowLeft } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Bus, Clock, MapPin, ArrowLeft, Loader2 } from "lucide-react"
 
 interface Seat {
   seat_id: number
@@ -14,24 +15,24 @@ interface Seat {
   is_available: boolean
 }
 
-interface Schedule {
-  schedule_id: number
-  departure_time: string
-  arrival_time: string
-  fare: number
-  route: {
-    source: string
-    destination: string
-    distance: number
-  }
-  bus: {
-    bus_number: string
-    capacity: number
-  }
-}
-
 interface BookingData {
-  schedule: Schedule
+  schedule: {
+    schedule_id: number
+    departure_time: string
+    arrival_time: string
+    fare: number
+    route: {
+      route_id: number
+      source: string
+      destination: string
+      distance: number
+    }
+    bus: {
+      bus_id: number
+      bus_number: string
+      capacity: number
+    }
+  }
   seats: Seat[]
 }
 
@@ -46,15 +47,27 @@ export default function BookingPage({ params }: { params: { scheduleId: string }
   useEffect(() => {
     const fetchBookingData = async () => {
       try {
-        const response = await fetch(`/api/seats/${params.scheduleId}`)
+        const scheduleId = params.scheduleId
+        if (!scheduleId || isNaN(Number(scheduleId))) {
+          setError("Invalid schedule ID")
+          setLoading(false)
+          return
+        }
+
+        const response = await fetch(`/api/seats/${scheduleId}`)
         const data = await response.json()
 
         if (response.ok) {
+          if (!data.schedule || !data.schedule.route) {
+            setError("Schedule data is incomplete")
+            return
+          }
           setBookingData(data)
         } else {
           setError(data.error || "Failed to fetch booking data")
         }
       } catch (err) {
+        console.error("Fetch error:", err)
         setError("Network error. Please try again.")
       } finally {
         setLoading(false)
@@ -108,8 +121,15 @@ export default function BookingPage({ params }: { params: { scheduleId: string }
         router.push(`/payment/${data.reservation_id}`)
       } else {
         setError(data.error || "Booking failed")
+        // If seats are no longer available, refresh the page
+        if (data.unavailable_seats) {
+          setTimeout(() => {
+            window.location.reload()
+          }, 2000)
+        }
       }
     } catch (err) {
+      console.error("Booking error:", err)
       setError("Network error. Please try again.")
     } finally {
       setBookingLoading(false)
@@ -137,21 +157,26 @@ export default function BookingPage({ params }: { params: { scheduleId: string }
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <div className="text-kerala-white text-xl">Loading booking details...</div>
+        <div className="flex items-center space-x-2 text-kerala-white text-xl">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading booking details...</span>
+        </div>
       </div>
     )
   }
 
-  if (!bookingData) {
+  if (!bookingData || !bookingData.schedule || !bookingData.schedule.route) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
+        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl max-w-md">
           <CardContent className="pt-6 text-center">
-            <p className="text-kerala-brown">Booking data not found</p>
-            <Link href="/dashboard">
-              <Button className="mt-4 bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">
-                Back to Dashboard
-              </Button>
+            <Bus className="h-16 w-16 text-kerala-brown/50 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-kerala-brown mb-2">Booking Not Available</h3>
+            <p className="text-kerala-brown/70 mb-4">
+              {error || "The requested schedule could not be found or is no longer available."}
+            </p>
+            <Link href="/search">
+              <Button className="bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">Search Other Buses</Button>
             </Link>
           </CardContent>
         </Card>
@@ -247,7 +272,14 @@ export default function BookingPage({ params }: { params: { scheduleId: string }
                     className="w-full bg-kerala-green hover:bg-kerala-green/90 text-kerala-white"
                     disabled={bookingLoading}
                   >
-                    {bookingLoading ? "Processing..." : `Proceed to Payment (₹${totalFare})`}
+                    {bookingLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      `Proceed to Payment (₹${totalFare})`
+                    )}
                   </Button>
                 </CardContent>
               </Card>
@@ -265,9 +297,9 @@ export default function BookingPage({ params }: { params: { scheduleId: string }
               </CardHeader>
               <CardContent>
                 {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <p className="text-red-800 text-sm">{error}</p>
-                  </div>
+                  <Alert className="mb-4 border-red-200 bg-red-50">
+                    <AlertDescription className="text-red-800">{error}</AlertDescription>
+                  </Alert>
                 )}
 
                 {/* Legend */}

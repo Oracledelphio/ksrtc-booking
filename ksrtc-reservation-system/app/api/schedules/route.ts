@@ -15,6 +15,14 @@ export async function GET(req: NextRequest) {
         source: { contains: source, mode: "insensitive" },
         destination: { contains: destination, mode: "insensitive" },
       }
+    } else if (source) {
+      whereClause.route = {
+        source: { contains: source, mode: "insensitive" },
+      }
+    } else if (destination) {
+      whereClause.route = {
+        destination: { contains: destination, mode: "insensitive" },
+      }
     }
 
     if (date) {
@@ -31,10 +39,23 @@ export async function GET(req: NextRequest) {
     const schedules = await prisma.schedule.findMany({
       where: whereClause,
       include: {
-        route: true,
+        route: {
+          select: {
+            route_id: true,
+            source: true,
+            destination: true,
+            distance: true,
+          },
+        },
         bus: {
           include: {
-            seats: true,
+            seats: {
+              select: {
+                seat_id: true,
+                seat_number: true,
+                is_available: true,
+              },
+            },
           },
         },
       },

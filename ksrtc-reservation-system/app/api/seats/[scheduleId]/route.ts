@@ -5,9 +5,21 @@ export async function GET(req: NextRequest, { params }: { params: { scheduleId: 
   try {
     const scheduleId = Number.parseInt(params.scheduleId)
 
+    if (isNaN(scheduleId)) {
+      return NextResponse.json({ error: "Invalid schedule ID" }, { status: 400 })
+    }
+
     const schedule = await prisma.schedule.findUnique({
       where: { schedule_id: scheduleId },
       include: {
+        route: {
+          select: {
+            route_id: true,
+            source: true,
+            destination: true,
+            distance: true,
+          },
+        },
         bus: {
           include: {
             seats: {

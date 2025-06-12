@@ -3,9 +3,15 @@ import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/middleware"
 
 export const GET = withAuth(
-  async (req: NextRequest, userId: number, { params }: { params: { reservationId: string } }) => {
+  async (req: NextRequest, userId: number) => {
     try {
-      const reservationId = Number.parseInt(params.reservationId)
+      const url = new URL(req.url)
+      const reservationIdStr = url.pathname.split("/").filter(Boolean).pop()
+      const reservationId = Number.parseInt(reservationIdStr ?? "")
+
+      if (isNaN(reservationId)) {
+        return NextResponse.json({ error: "Invalid reservation ID" }, { status: 400 })
+      }
 
       const reservation = await prisma.reservation.findFirst({
         where: {
@@ -15,12 +21,40 @@ export const GET = withAuth(
         include: {
           schedule: {
             include: {
-              route: true,
-              bus: true,
+              route: {
+                select: {
+                  route_id: true,
+                  source: true,
+                  destination: true,
+                  distance: true,
+                },
+              },
+              bus: {
+                select: {
+                  bus_id: true,
+                  bus_number: true,
+                  capacity: true,
+                },
+              },
             },
           },
-          payment: true,
-          customer: true,
+          payment: {
+            select: {
+              payment_id: true,
+              amount: true,
+              payment_status: true,
+              payment_method: true,
+              payment_date: true,
+            },
+          },
+          customer: {
+            select: {
+              customer_id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
         },
       })
 
