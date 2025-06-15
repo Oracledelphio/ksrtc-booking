@@ -22,6 +22,7 @@ interface Reservation {
   status: string
   reservation_date: string
   schedule: {
+    // Full schedule object
     departure_time: string
     arrival_time: string
     fare: number
@@ -34,6 +35,7 @@ interface Reservation {
     }
   }
   payment: {
+    // Payment can be null if not completed
     amount: number
     payment_status: string
     payment_method: string

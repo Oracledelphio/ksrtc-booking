@@ -6,14 +6,23 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle, Bus, Clock, MapPin, User, Phone, Mail, Download } from "lucide-react"
+import { CheckCircle, Bus, Clock, MapPin, User, Phone, Mail, Download, Ticket, Loader2 } from "lucide-react"
+
+interface TicketData {
+  ticket_id: number
+  ticket_no: string
+  seat_no: string
+  issue_date: string
+}
 
 interface ReservationDetails {
   reservation_id: number
   seats_booked: string[]
   status: string
   reservation_date: string
+  tickets: TicketData[] // Added tickets
   schedule: {
+    // Full schedule object
     departure_time: string
     arrival_time: string
     fare: number
@@ -26,12 +35,13 @@ interface ReservationDetails {
     }
   }
   payment: {
+    // Payment can be null if not completed
     payment_id: number
     amount: number
     payment_status: string
     payment_method: string
     payment_date: string
-  }
+  } | null
   customer: {
     name: string
     email: string
@@ -42,6 +52,7 @@ interface ReservationDetails {
 export default function ConfirmationPage({ params }: { params: { reservationId: string } }) {
   const [reservation, setReservation] = useState<ReservationDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [downloadLoading, setDownloadLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
 
@@ -77,6 +88,47 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
     fetchReservation()
   }, [params.reservationId, router])
 
+  const handleDownloadTickets = async () => {
+    if (!reservation) return
+
+    const token = localStorage.getItem("token")
+    if (!token) {
+      router.push("/login")
+      return
+    }
+
+    setDownloadLoading(true)
+
+    try {
+      const response = await fetch(`/api/tickets/download/${params.reservationId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // Create and download the ticket as JSON (in a real app, you'd generate a PDF)
+        const ticketBlob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+        const url = URL.createObjectURL(ticketBlob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `KSRTC_Tickets_${reservation.reservation_id}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      } else {
+        setError(data.error || "Failed to download tickets")
+      }
+    } catch (err) {
+      setError("Network error. Please try again.")
+    } finally {
+      setDownloadLoading(false)
+    }
+  }
+
   const formatTime = (dateString: string) => {
     return new Date(dateString).toLocaleTimeString("en-IN", {
       hour: "2-digit",
@@ -107,7 +159,10 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <div className="text-kerala-white text-xl">Loading confirmation details...</div>
+        <div className="flex items-center space-x-2 text-kerala-white text-xl">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading confirmation details...</span>
+        </div>
       </div>
     )
   }
@@ -115,13 +170,13 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
   if (error || !reservation) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-kerala-green to-kerala-brown kerala-pattern flex items-center justify-center">
-        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
+        <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl max-w-md">
           <CardContent className="pt-6 text-center">
-            <p className="text-kerala-brown">{error || "Reservation not found"}</p>
+            <CheckCircle className="h-16 w-16 text-kerala-brown/50 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-kerala-brown mb-2">Booking Not Found</h3>
+            <p className="text-kerala-brown/70 mb-4">{error || "Reservation not found"}</p>
             <Link href="/dashboard">
-              <Button className="mt-4 bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">
-                Back to Dashboard
-              </Button>
+              <Button className="bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">Back to Dashboard</Button>
             </Link>
           </CardContent>
         </Card>
@@ -138,7 +193,7 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
             <CheckCircle className="h-16 w-16 text-kerala-white" />
           </div>
           <h1 className="text-4xl font-bold text-kerala-white mb-2">Booking Confirmed!</h1>
-          <p className="text-kerala-white/80 text-lg">Your bus ticket has been successfully booked</p>
+          <p className="text-kerala-white/80 text-lg">Your bus tickets have been successfully issued</p>
         </div>
 
         <div className="max-w-4xl mx-auto space-y-6">
@@ -226,59 +281,105 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
             </CardContent>
           </Card>
 
+          {/* Individual Tickets */}
+          {reservation.tickets && reservation.tickets.length > 0 && (
+            <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-kerala-brown flex items-center">
+                  <Ticket className="h-6 w-6 mr-2" />
+                  Individual Tickets
+                </CardTitle>
+                <CardDescription className="text-kerala-brown/70">Each seat has its own ticket</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {reservation.tickets.map((ticket) => (
+                    <Card key={ticket.ticket_id} className="border border-kerala-green/20">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center">
+                            <Ticket className="h-4 w-4 text-kerala-green mr-2" />
+                            <span className="font-semibold text-kerala-brown">Ticket {ticket.ticket_no}</span>
+                          </div>
+                          <Badge className="bg-kerala-green text-kerala-white">Seat {ticket.seat_no}</Badge>
+                        </div>
+                        <div className="text-sm text-kerala-brown/70">Issued: {formatDateTime(ticket.issue_date)}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Payment Details */}
-          <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
-            <CardHeader>
-              <CardTitle className="text-kerala-brown">Payment Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Payment ID:</span>
-                    <span className="text-kerala-brown font-semibold">#{reservation.payment.payment_id}</span>
+          {reservation.payment && ( // Only show payment details if payment exists
+            <Card className="bg-kerala-white/95 backdrop-blur-sm border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-kerala-brown">Payment Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Payment ID:</span>
+                      <span className="text-kerala-brown font-semibold">#{reservation.payment.payment_id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Amount Paid:</span>
+                      <span className="text-kerala-green font-bold text-lg">₹{reservation.payment.amount}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Payment Method:</span>
+                      <span className="text-kerala-brown font-semibold capitalize">
+                        {reservation.payment.payment_method.replace("_", " ")}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Amount Paid:</span>
-                    <span className="text-kerala-green font-bold text-lg">₹{reservation.payment.amount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Payment Method:</span>
-                    <span className="text-kerala-brown font-semibold capitalize">
-                      {reservation.payment.payment_method.replace("_", " ")}
-                    </span>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Payment Status:</span>
+                      <Badge className="bg-green-500">
+                        {reservation.payment.payment_status.charAt(0).toUpperCase() +
+                          reservation.payment.payment_status.slice(1)}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Payment Date:</span>
+                      <span className="text-kerala-brown font-semibold">
+                        {formatDateTime(reservation.payment.payment_date)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-kerala-brown">Booking Date:</span>
+                      <span className="text-kerala-brown font-semibold">
+                        {formatDateTime(reservation.reservation_date)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Payment Status:</span>
-                    <Badge className="bg-green-500">
-                      {reservation.payment.payment_status.charAt(0).toUpperCase() +
-                        reservation.payment.payment_status.slice(1)}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Payment Date:</span>
-                    <span className="text-kerala-brown font-semibold">
-                      {formatDateTime(reservation.payment.payment_date)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-kerala-brown">Booking Date:</span>
-                    <span className="text-kerala-brown font-semibold">
-                      {formatDateTime(reservation.reservation_date)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button className="bg-kerala-green hover:bg-kerala-green/90 text-kerala-white">
-              <Download className="h-4 w-4 mr-2" />
-              Download Ticket
+            <Button
+              onClick={handleDownloadTickets}
+              className="bg-kerala-green hover:bg-kerala-green/90 text-kerala-white"
+              disabled={downloadLoading || reservation.status !== "confirmed"}
+            >
+              {downloadLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating Tickets...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download Tickets
+                </>
+              )}
             </Button>
             <Link href="/profile">
               <Button
@@ -305,7 +406,8 @@ export default function ConfirmationPage({ params }: { params: { reservationId: 
             </CardHeader>
             <CardContent className="text-kerala-brown/80 space-y-2">
               <p>• Please arrive at the boarding point at least 15 minutes before departure time.</p>
-              <p>• Carry a valid ID proof along with this ticket.</p>
+              <p>• Carry a valid ID proof along with your tickets.</p>
+              <p>• Each passenger must have their individual ticket for the assigned seat.</p>
               <p>• For any queries, contact KSRTC customer support.</p>
               <p>• Cancellation and refund policies apply as per KSRTC terms and conditions.</p>
             </CardContent>

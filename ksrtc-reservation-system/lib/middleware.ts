@@ -1,8 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verifyToken } from "./auth"
 
-export function withAuth(handler: (req: NextRequest, userId: number) => Promise<NextResponse>) {
-  return async (req: NextRequest) => {
+// The handler now accepts a context object which contains params for dynamic routes
+export function withAuth<T extends { params: any } = { params: {} }>(
+  handler: (req: NextRequest, userId: number, context: T) => Promise<NextResponse>,
+) {
+  return async (req: NextRequest, context: T) => {
     const token = req.headers.get("authorization")?.replace("Bearer ", "")
 
     if (!token) {
@@ -14,6 +17,7 @@ export function withAuth(handler: (req: NextRequest, userId: number) => Promise<
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    return handler(req, decoded.userId)
+    // Pass the context object (which contains params) to the handler
+    return handler(req, decoded.userId, context)
   }
 }

@@ -6,6 +6,23 @@ export const POST = withAuth(async (req: NextRequest, userId: number) => {
   try {
     const { reservation_id, amount, payment_method } = await req.json()
 
+    // Get reservation details
+    const reservation = await prisma.reservation.findUnique({
+      where: { reservation_id: reservation_id },
+      include: {
+        schedule: {
+          include: {
+            route: true,
+            bus: true,
+          },
+        },
+      },
+    })
+
+    if (!reservation) {
+      return NextResponse.json({ error: "Reservation not found" }, { status: 404 })
+    }
+
     // Create payment
     const payment = await prisma.payment.create({
       data: {
@@ -17,7 +34,7 @@ export const POST = withAuth(async (req: NextRequest, userId: number) => {
     })
 
     // Update reservation with payment
-    const reservation = await prisma.reservation.update({
+    const updatedReservation = await prisma.reservation.update({
       where: { reservation_id: reservation_id },
       data: {
         payment_id: payment.payment_id,
@@ -34,9 +51,28 @@ export const POST = withAuth(async (req: NextRequest, userId: number) => {
       },
     })
 
+    // Create individual tickets for each seat (weak entity)
+    const ticketData = reservation.seats_booked.map((seatNo, index) => ({
+      reservation_id: reservation_id,
+      ticket_no: `T${String(index + 1).padStart(3, "0")}`, // T001, T002, etc.
+      seat_no: seatNo,
+      issue_date: new Date(),
+    }))
+
+    await prisma.ticket.createMany({
+      data: ticketData,
+    })
+
+    // Get the created tickets
+    const tickets = await prisma.ticket.findMany({
+      where: { reservation_id: reservation_id },
+      orderBy: { ticket_no: "asc" },
+    })
+
     return NextResponse.json({
       payment,
-      reservation,
+      reservation: updatedReservation,
+      tickets,
     })
   } catch (error) {
     console.error("Payment error:", error)
